@@ -9,24 +9,76 @@ import PropertyEditor from "@/components/property-editor"
 import UrlInputForm from "@/components/url-input-form"
 import { generateCardHtml } from "@/lib/generate-card-html"
 import BackgroundPicker, { BackgroundConfig, backgroundToCss } from "@/components/background-picker"
+import type { CardCopy, ScrapedProperty } from "@/lib/types"
 
 // Instagram Story: 1080x1920 rendered at half size for preview (540x960)
 const STORY_W = 1080
 const STORY_H = 1920
 const CARD_W = 820
 
+/** El scraper devuelve la operación en minúscula ("venta"); el editor usa "Venta". */
+function formatOperation(operation: string): string {
+  if (!operation) return "Venta"
+  return operation
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
+}
+
+/**
+ * La tarjeta muestra un solo chip de superficie (`area`), así que cuando la ficha
+ * trae las dos, la que no se muestra se perdería. Se recupera como etiqueta.
+ * Es un dato duro y determinista: no tiene sentido gastarlo en el prompt.
+ */
+function complementaryAreaTag(property: ScrapedProperty): string | null {
+  const { coveredAreaM2, totalAreaM2 } = property
+  if (coveredAreaM2 == null || totalAreaM2 == null) return null
+  // El chip usa `coveredAreaM2 ?? totalAreaM2`, así que la que sobra es la total.
+  return `${Math.round(totalAreaM2)} m² totales`
+}
+
+/** Combina los datos duros del scraper con el copy redactado por la IA. */
+function toPropertyData(property: ScrapedProperty, copy: CardCopy | null): PropertyData {
+  const location = copy?.locationNormalized || [property.city, property.province].filter(Boolean).join(", ")
+
+  const areaTag = complementaryAreaTag(property)
+  const tags = [...(areaTag ? [areaTag] : []), ...(copy?.tags ?? [])].slice(0, 3)
+
+  return {
+    title: copy?.titleOptions[0] || property.title,
+    location,
+    price: "",
+    image: property.image,
+    bedrooms: property.bedrooms,
+    bathrooms: property.bathrooms,
+    area: property.coveredAreaM2 ?? property.totalAreaM2,
+    operationType: formatOperation(property.operation),
+    description: "",
+    tags,
+  }
+}
+
 export default function Home() {
   const [propertyData, setPropertyData] = useState<PropertyData | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [loadingStage, setLoadingStage] = useState<"idle" | "scraping" | "generating">("idle")
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  const [background, setBackground] = useState<BackgroundConfig>({ type: "solid", color: "#00A657" })
+  const [background, setBackground] = useState<BackgroundConfig>({ type: "solid", color: "#049D5A" })
+  // Las 3 variantes generadas de una sola vez. Viven mientras dure la tarjeta y se
+  // descartan al pegar otra URL: el botón cicla sobre estas y nunca vuelve a la IA.
+  const [titleOptions, setTitleOptions] = useState<string[]>([])
+  const [titleIndex, setTitleIndex] = useState(0)
+
+  const isLoading = loadingStage !== "idle"
 
   const fetchPropertyData = async (url: string) => {
-    setIsLoading(true)
+    setLoadingStage("scraping")
     setError(null)
     setPropertyData(null)
+    setTitleOptions([])
+    setTitleIndex(0)
 
+    let property: ScrapedProperty
     try {
       const response = await fetch("/api/scrape", {
         method: "POST",
@@ -37,15 +89,56 @@ export default function Home() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || data.details || "Error al procesar la URL")
+        throw new Error(data.error || "Error al procesar la URL")
       }
 
-      setPropertyData(data)
+      property = data.property
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al procesar la URL")
-    } finally {
-      setIsLoading(false)
+      setLoadingStage("idle")
+      return
     }
+
+    // Los datos duros ya son correctos: si la redacción falla igual mostramos la
+    // tarjeta con el título original y el editor permite corregir a mano.
+    setLoadingStage("generating")
+    let copy: CardCopy | null = null
+    try {
+      const response = await fetch("/api/process-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        copy = data.content
+      } else {
+        setError(`No se pudo generar el copy (${data.error}). Se muestran los datos sin redactar.`)
+      }
+    } catch {
+      setError("No se pudo generar el copy. Se muestran los datos sin redactar.")
+    }
+
+    setTitleOptions(copy?.titleOptions ?? [])
+    setTitleIndex(0)
+    setPropertyData(toPropertyData(property, copy))
+    setLoadingStage("idle")
+  }
+
+  /**
+   * Cicla entre las 3 variantes generadas al principio, volviendo a la primera
+   * después de la última. No llama a la IA: cada llamada pesa ~2.100 tokens de
+   * system prompt contra un límite de 8000 por minuto, así que clickear seguido
+   * disparaba 429 y ponía en riesgo la cuenta.
+   * Solo toca el título: ubicación y etiquetas quedan intactas.
+   */
+  const nextTitle = () => {
+    if (!propertyData || titleOptions.length < 2) return
+    const next = (titleIndex + 1) % titleOptions.length
+    setTitleIndex(next)
+    setPropertyData({ ...propertyData, title: titleOptions[next] })
   }
 
   const exportToPng = useCallback(async () => {
@@ -112,7 +205,11 @@ export default function Home() {
           className="bg-card rounded-2xl border border-border p-6 mb-8"
           style={{ boxShadow: "0 1px 2px 0 rgba(0, 0, 0, 0.05)" }}
         >
-          <UrlInputForm onSubmit={fetchPropertyData} isLoading={isLoading} />
+          <UrlInputForm
+            onSubmit={fetchPropertyData}
+            isLoading={isLoading}
+            loadingLabel={loadingStage === "generating" ? "Redactando..." : "Leyendo ficha..."}
+          />
         </div>
 
         {/* Error Alert */}
@@ -127,7 +224,13 @@ export default function Home() {
         {propertyData && (
           <div className="space-y-6">
             {/* Property Editor */}
-            <PropertyEditor data={propertyData} onChange={setPropertyData} />
+            <PropertyEditor
+              data={propertyData}
+              onChange={setPropertyData}
+              onNextTitle={nextTitle}
+              titleIndex={titleIndex}
+              titleCount={titleOptions.length}
+            />
 
             {/* Background Picker */}
             <BackgroundPicker value={background} onChange={setBackground} />

@@ -1,16 +1,27 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { RefreshCw } from "lucide-react"
 import { PropertyData } from "@/components/property-card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 interface PropertyEditorProps {
   data: PropertyData
   onChange: (data: PropertyData) => void
+  onNextTitle?: () => void
+  titleIndex?: number
+  titleCount?: number
 }
 
-export default function PropertyEditor({ data, onChange }: PropertyEditorProps) {
+export default function PropertyEditor({
+  data,
+  onChange,
+  onNextTitle,
+  titleIndex = 0,
+  titleCount = 0,
+}: PropertyEditorProps) {
   // Estado local para el campo de tags (permite escribir libremente)
   const [tagsInput, setTagsInput] = useState((data.tags || []).join(", "))
 
@@ -41,9 +52,28 @@ export default function PropertyEditor({ data, onChange }: PropertyEditorProps) 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Titulo */}
         <div className="sm:col-span-2">
-          <Label htmlFor="title" className="text-sm text-muted-foreground mb-1.5 block">
-            Título
-          </Label>
+          <div className="flex items-center justify-between mb-1.5">
+            <Label htmlFor="title" className="text-sm text-muted-foreground">
+              Título
+            </Label>
+            {onNextTitle && titleCount > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {titleIndex + 1} de {titleCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onNextTitle}
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  Otro título
+                </Button>
+              </div>
+            )}
+          </div>
           <Input
             id="title"
             value={data.title || ""}
@@ -162,7 +192,7 @@ export default function PropertyEditor({ data, onChange }: PropertyEditorProps) 
                 parseAndSaveTags()
               }
             }}
-            placeholder="Ej: Oportunidad, A estrenar, Financiación"
+            placeholder="Ej: Cochera, A estrenar, Financiación"
             className="rounded-lg"
           />
           {data.tags && data.tags.length > 0 && (

@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 interface UrlInputFormProps {
   onSubmit: (url: string) => void
   isLoading: boolean
+  loadingLabel?: string
 }
 
-export default function UrlInputForm({ onSubmit, isLoading }: UrlInputFormProps) {
+export default function UrlInputForm({ onSubmit, isLoading, loadingLabel = "Cargando..." }: UrlInputFormProps) {
   const [url, setUrl] = useState("")
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,7 +43,7 @@ export default function UrlInputForm({ onSubmit, isLoading }: UrlInputFormProps)
           {isLoading ? (
             <>
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              Cargando...
+              {loadingLabel}
             </>
           ) : (
             <>

@@ -9,7 +9,7 @@ export function generateCardHtml(
   storyW: number,
   storyH: number,
   cardW: number,
-  background: BackgroundConfig = { type: "solid", color: "#00A657" }
+  background: BackgroundConfig = { type: "solid", color: "#049D5A" }
 ): string {
   const bgCss = backgroundToCss(background)
   const cleanTitle = (title: string) => title.trim().substring(0, 60)

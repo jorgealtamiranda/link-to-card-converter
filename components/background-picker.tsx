@@ -6,19 +6,20 @@ export type BackgroundConfig =
   | { type: "solid"; color: string }
   | { type: "gradient"; color1: string; color2: string; angle: number }
 
+// Misma paleta que la OVERLAY_PALETTE de pinares-to-carrousel
+// (components/slides/portadas/shared.tsx), verificada contra los fills de Figma.
 const PRESETS: BackgroundConfig[] = [
-  { type: "solid", color: "#00A657" },
-  { type: "solid", color: "#1e293b" },
-  { type: "solid", color: "#EC3136" },
-  { type: "solid", color: "#0ea5e9" },
-  { type: "solid", color: "#7c3aed" },
-  { type: "solid", color: "#f59e0b" },
-  { type: "gradient", color1: "#f37430", color2: "#eb3135", angle: 135 },
-  { type: "gradient", color1: "#a1cd47", color2: "#00a657", angle: 135 },
-  { type: "gradient", color1: "#1e293b", color2: "#475569", angle: 160 },
-  { type: "gradient", color1: "#7c3aed", color2: "#EC3136", angle: 135 },
-  { type: "gradient", color1: "#0ea5e9", color2: "#7c3aed", angle: 135 },
-  { type: "gradient", color1: "#00A657", color2: "#f59e0b", angle: 135 },
+  { type: "solid", color: "#167367" },
+  { type: "solid", color: "#108263" },
+  { type: "solid", color: "#049D5A" },
+  { type: "solid", color: "#8A181C" },
+  { type: "solid", color: "#1C1C1C" },
+  { type: "gradient", color1: "#84171B", color2: "#EA2930", angle: 180 },
+  { type: "gradient", color1: "#177168", color2: "#00A657", angle: 180 },
+  // En pinares este va de negro a transparente porque es un scrim sobre foto.
+  // Acá el fondo es opaco, así que la transparencia dejaría ver blanco: se
+  // reemplaza el extremo por el verde oscuro que ya usa el degradado verde.
+  { type: "gradient", color1: "#1C1C1C", color2: "#177168", angle: 180 },
 ]
 
 export function backgroundToCss(bg: BackgroundConfig): string {
@@ -34,10 +35,10 @@ interface Props {
 export default function BackgroundPicker({ value, onChange }: Props) {
   const [tab, setTab] = useState<"solid" | "gradient">(value.type)
 
-  const solidColor = value.type === "solid" ? value.color : "#00A657"
-  const gradColor1 = value.type === "gradient" ? value.color1 : "#00A657"
-  const gradColor2 = value.type === "gradient" ? value.color2 : "#0ea5e9"
-  const gradAngle = value.type === "gradient" ? value.angle : 135
+  const solidColor = value.type === "solid" ? value.color : "#049D5A"
+  const gradColor1 = value.type === "gradient" ? value.color1 : "#177168"
+  const gradColor2 = value.type === "gradient" ? value.color2 : "#00A657"
+  const gradAngle = value.type === "gradient" ? value.angle : 180
 
   return (
     <div style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "20px" }}>
@@ -76,11 +77,9 @@ export default function BackgroundPicker({ value, onChange }: Props) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
         {PRESETS.filter((p) => p.type === tab).map((preset, i) => {
           const css = backgroundToCss(preset)
-          const isActive =
-            value.type === preset.type &&
-            (preset.type === "solid"
-              ? value.color === preset.color
-              : value.color1 === preset.color1 && value.color2 === preset.color2)
+          // Comparar el CSS resultante evita tener que estrechar la unión
+          // BackgroundConfig para leer .color / .color1 de cada variante.
+          const isActive = backgroundToCss(value) === css
           return (
             <button
               key={i}
