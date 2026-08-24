@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import puppeteer from 'puppeteer-core'
-import chromium from '@sparticuz/chromium'
 import type { PropertyData } from '@/components/property-card'
 import { BackgroundConfig, DEFAULT_BACKGROUND } from '@/lib/background'
 import { CardAssets, LOGO_URL, STORY_H, STORY_W, generateCardHtml } from '@/lib/generate-card-html'
@@ -9,6 +8,25 @@ export const runtime = 'nodejs'
 // Tope del plan Hobby. El arranque en frío de Chromium (extraer los .br a /tmp
 // y levantar el proceso) se lleva varios segundos antes del primer render.
 export const maxDuration = 60
+
+/**
+ * @sparticuz/chromium extrae las shared libraries del binario (libnss3 y
+ * compañía) y arma LD_LIBRARY_PATH solo si se cree dentro de un Lambda de AWS,
+ * y esa detección mira AWS_EXECUTION_ENV. Vercel con Fluid Compute ya no la
+ * define, así que sin esto Chromium arranca sin sus librerías y muere con
+ * "libnss3.so: cannot open shared object file" (código 127).
+ *
+ * Las shared libraries viven en bin/al2023.tar.br, que es la variante que el
+ * paquete asocia a los runtimes de Node 20/22 sobre Amazon Linux 2023 — la
+ * misma base sobre la que corren las funciones de Vercel.
+ *
+ * La detección corre al importar el módulo, por eso el import es dinámico: un
+ * `import` estático se hoistea por encima de esta asignación.
+ */
+async function loadChromium() {
+  process.env.AWS_EXECUTION_ENV = 'AWS_Lambda_nodejs22.x'
+  return (await import('@sparticuz/chromium')).default
+}
 
 /**
  * Descarga una imagen y la devuelve como data: URI. Mismo patrón que
@@ -61,6 +79,8 @@ export async function POST(request: NextRequest) {
     const [image, logo] = await Promise.all([toDataUri(property.image), toDataUri(LOGO_URL)])
     const assets: CardAssets = { image, logo }
     const html = generateCardHtml(property, assets, background ?? DEFAULT_BACKGROUND)
+
+    const chromium = await loadChromium()
 
     // La tarjeta es HTML/CSS plano: sin WebGL no hace falta extraer
     // swiftshader.tar.br, y el arranque en frío baja.
