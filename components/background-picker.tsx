@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 
-export type BackgroundConfig =
-  | { type: "solid"; color: string }
-  | { type: "gradient"; color1: string; color2: string; angle: number }
+import { BackgroundConfig, backgroundToCss } from "@/lib/background"
+
+export type { BackgroundConfig }
+export { backgroundToCss }
 
 // Misma paleta que la OVERLAY_PALETTE de pinares-to-carrousel
 // (components/slides/portadas/shared.tsx), verificada contra los fills de Figma.
@@ -21,11 +22,6 @@ const PRESETS: BackgroundConfig[] = [
   // reemplaza el extremo por el verde oscuro que ya usa el degradado verde.
   { type: "gradient", color1: "#1C1C1C", color2: "#177168", angle: 180 },
 ]
-
-export function backgroundToCss(bg: BackgroundConfig): string {
-  if (bg.type === "solid") return bg.color
-  return `linear-gradient(${bg.angle}deg, ${bg.color1}, ${bg.color2})`
-}
 
 interface Props {
   value: BackgroundConfig

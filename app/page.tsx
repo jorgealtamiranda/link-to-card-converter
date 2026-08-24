@@ -7,14 +7,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import PropertyCard, { PropertyData } from "@/components/property-card"
 import PropertyEditor from "@/components/property-editor"
 import UrlInputForm from "@/components/url-input-form"
-import { generateCardHtml } from "@/lib/generate-card-html"
-import BackgroundPicker, { BackgroundConfig, backgroundToCss } from "@/components/background-picker"
+import { CARD_W, STORY_H, STORY_W } from "@/lib/generate-card-html"
+import BackgroundPicker from "@/components/background-picker"
+import { BackgroundConfig, DEFAULT_BACKGROUND, backgroundToCss } from "@/lib/background"
 import type { CardCopy, ScrapedProperty } from "@/lib/types"
-
-// Instagram Story: 1080x1920 rendered at half size for preview (540x960)
-const STORY_W = 1080
-const STORY_H = 1920
-const CARD_W = 820
 
 /** El scraper devuelve la operación en minúscula ("venta"); el editor usa "Venta". */
 function formatOperation(operation: string): string {
@@ -63,7 +59,7 @@ export default function Home() {
   const [loadingStage, setLoadingStage] = useState<"idle" | "scraping" | "generating">("idle")
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  const [background, setBackground] = useState<BackgroundConfig>({ type: "solid", color: "#049D5A" })
+  const [background, setBackground] = useState<BackgroundConfig>(DEFAULT_BACKGROUND)
   // Las 3 variantes generadas de una sola vez. Viven mientras dure la tarjeta y se
   // descartan al pegar otra URL: el botón cicla sobre estas y nunca vuelve a la IA.
   const [titleOptions, setTitleOptions] = useState<string[]>([])
@@ -148,36 +144,38 @@ export default function Home() {
     setError(null)
 
     try {
-      // Generate full HTML for the card
-      const html = generateCardHtml(propertyData, STORY_W, STORY_H, CARD_W, background)
-
-      // Send to server for Puppeteer screenshot
+      // El servidor arma el HTML y lo renderiza con Puppeteer: necesita
+      // descargar la foto y el logo para embeberlos antes de abrir Chromium.
       const response = await fetch("/api/screenshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html }),
+        body: JSON.stringify({ property: propertyData, background }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.error || "Error al generar imagen")
+        // La ruta manda el mensaje real en `details`. Sin mostrarlo, cualquier
+        // fallo en producción queda como un "intenta nuevamente" sin pistas.
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.details || data?.error || `Error ${response.status} al generar imagen`)
       }
 
-      // Download the image
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.download = `propiedad-${Date.now()}.png`
-      link.href = data.image
+      link.href = objectUrl
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      // Revocar en el mismo tick puede cancelar la descarga recién iniciada.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
     } catch (err) {
       console.error("Export error:", err)
-      setError("Error al exportar la imagen. Intenta nuevamente.")
+      setError(err instanceof Error ? err.message : "Error al exportar la imagen. Intenta nuevamente.")
     } finally {
       setIsExporting(false)
     }
-  }, [propertyData])
+  }, [propertyData, background])
 
   return (
     <main className="min-h-screen bg-background">

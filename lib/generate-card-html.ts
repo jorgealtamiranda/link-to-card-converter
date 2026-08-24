@@ -1,16 +1,34 @@
-import { PropertyData } from "@/components/property-card"
-import { BackgroundConfig, backgroundToCss } from "@/components/background-picker"
+import type { PropertyData } from "@/components/property-card"
+import { BackgroundConfig, DEFAULT_BACKGROUND, backgroundToCss } from "@/lib/background"
 
-// Logo URL - usando blob storage de Vercel que es accesible por Puppeteer
-const LOGO_URL = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/lospinares260%201-YQBt1gpiCxGTYIPAVRoB52N9UA6Iv3.png"
+// Instagram Story: 1080x1920. La preview del navegador lo muestra a la mitad.
+export const STORY_W = 1080
+export const STORY_H = 1920
+export const CARD_W = 820
+
+// Logo en blob storage de Vercel. Solo se usa como origen a descargar: dentro
+// del HTML entra ya convertido a data: URI.
+export const LOGO_URL = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/lospinares260%201-YQBt1gpiCxGTYIPAVRoB52N9UA6Iv3.png"
+
+/**
+ * Fuentes de imagen ya resueltas a data: URI por el servidor. El HTML del
+ * export no puede depender de la red: Chromium corre dentro de una función
+ * serverless y cualquier pedido lento se come el presupuesto de la ejecución.
+ * `null` significa que la descarga falló y esa imagen se omite.
+ */
+export interface CardAssets {
+  image: string | null
+  logo: string | null
+}
 
 export function generateCardHtml(
   data: PropertyData,
-  storyW: number,
-  storyH: number,
-  cardW: number,
-  background: BackgroundConfig = { type: "solid", color: "#049D5A" }
+  assets: CardAssets,
+  background: BackgroundConfig = DEFAULT_BACKGROUND
 ): string {
+  const storyW = STORY_W
+  const storyH = STORY_H
+  const cardW = CARD_W
   const bgCss = backgroundToCss(background)
   const cleanTitle = (title: string) => title.trim().substring(0, 60)
 
@@ -167,7 +185,7 @@ export function generateCardHtml(
 <body>
   <div class="card">
     <div class="image-container">
-      ${data.image ? `<img src="${data.image}" alt="Propiedad" crossorigin="anonymous" />` : ''}
+      ${assets.image ? `<img src="${assets.image}" alt="Propiedad" />` : ''}
       <div class="badge">${data.operationType}</div>
     </div>
     <div class="content">
@@ -188,9 +206,11 @@ export function generateCardHtml(
           `).join('')}
         </div>
       ` : ''}
-      <div style="display: flex; justify-content: center; margin-top: 44px;">
-        <img src="${LOGO_URL}" alt="Los Pinares" style="height: 110px; object-fit: contain;" crossorigin="anonymous">
-      </div>
+      ${assets.logo ? `
+        <div style="display: flex; justify-content: center; margin-top: 44px;">
+          <img src="${assets.logo}" alt="Los Pinares" style="height: 110px; object-fit: contain;">
+        </div>
+      ` : ''}
     </div>
   </div>
 </body>
